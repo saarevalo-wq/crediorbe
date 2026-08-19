@@ -1,4 +1,4 @@
-const CACHE = "crediorbe-v4";
+const CACHE = "crediorbe-v5";
 const SHELL = [
   "./",
   "./index.html",
@@ -40,18 +40,21 @@ self.addEventListener("fetch", (event) => {
   if (event.request.method !== "GET") return;
   const url = new URL(event.request.url);
   if (url.origin !== self.location.origin) return; // never cache Gmail API calls
+
+  // Network-first, cache as offline fallback only. iOS doesn't reliably
+  // re-check an installed PWA's service worker for updates on every launch,
+  // so a cache-first strategy here can serve stale code indefinitely no
+  // matter how many times the cache version is bumped. Always prefer the
+  // network when it's reachable; only fall back to the cached copy when
+  // truly offline.
   event.respondWith(
-    caches.match(event.request).then(
-      (cached) =>
-        cached ||
-        fetch(event.request)
-          .then((res) => {
-            const copy = res.clone();
-            caches.open(CACHE).then((cache) => cache.put(event.request, copy));
-            return res;
-          })
-          .catch(() => cached)
-    )
+    fetch(event.request, { cache: "no-store" })
+      .then((res) => {
+        const copy = res.clone();
+        caches.open(CACHE).then((cache) => cache.put(event.request, copy));
+        return res;
+      })
+      .catch(() => caches.match(event.request))
   );
 });
 
