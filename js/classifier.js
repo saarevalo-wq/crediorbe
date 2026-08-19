@@ -8,6 +8,7 @@
 // output shape is designed to match that migration path.
 
 import { ProcessType, Urgency } from "./models.js";
+import { addBusinessDays } from "./holidays-co.js";
 
 const TYPE_RULES = [
   { type: ProcessType.DESACATO, patterns: [/desacato/i] },
@@ -48,8 +49,14 @@ function detectDeadline(text, receivedAt) {
     if (!m) continue;
     const n = m[2] ? parseInt(m[2], 10) : WORD_NUM[m[1].toLowerCase()] || null;
     if (!n) continue;
-    const ms = unit === "hours" ? n * 3600_000 : n * 86_400_000;
-    return new Date(receivedAt.getTime() + ms).toISOString();
+    if (unit === "hours") {
+      // Hour-based terms (e.g. "48 horas") run continuously, not business-hours-only.
+      return new Date(receivedAt.getTime() + n * 3600_000).toISOString();
+    }
+    // Day-based terms follow the Colombian judicial-term rule: the count
+    // starts the day AFTER the email arrives, in business days only
+    // (skipping weekends and holidays) — see js/holidays-co.js.
+    return addBusinessDays(receivedAt, n).toISOString();
   }
   return null;
 }

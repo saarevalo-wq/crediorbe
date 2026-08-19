@@ -3,6 +3,8 @@
 // background poller since it can't import browser-served modules directly.
 // Keep both in sync if you tune the classification rules.
 
+import { addBusinessDays } from "./holidays-co.js";
+
 export const ProcessType = {
   DESACATO: "Desacato",
   TUTELA: "Tutela",
@@ -52,8 +54,10 @@ function detectDeadline(text, receivedAt) {
     if (!m) continue;
     const n = m[2] ? parseInt(m[2], 10) : WORD_NUM[m[1].toLowerCase()] || null;
     if (!n) continue;
-    const ms = unit === "hours" ? n * 3600_000 : n * 86_400_000;
-    return new Date(receivedAt.getTime() + ms).toISOString();
+    if (unit === "hours") {
+      return new Date(receivedAt.getTime() + n * 3600_000).toISOString();
+    }
+    return addBusinessDays(receivedAt, n).toISOString();
   }
   return null;
 }
