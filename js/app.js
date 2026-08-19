@@ -2,6 +2,7 @@ import { store } from "./state.js";
 import { initRouter, goTo } from "./router.js";
 import { initInbox, setInboxError } from "./views/inbox.js";
 import { initProcesos } from "./views/procesos.js";
+import { initCalendario } from "./views/calendario.js";
 import { initDetail, renderDetail } from "./views/detail.js";
 import { initSettings } from "./views/settings.js";
 import { classify } from "./classifier.js";
@@ -32,6 +33,13 @@ initInbox({
 });
 
 initProcesos({
+  onOpenItem: (id) => {
+    renderDetail(id);
+    goTo("detail");
+  },
+});
+
+initCalendario({
   onOpenItem: (id) => {
     renderDetail(id);
     goTo("detail");

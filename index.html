@@ -119,9 +119,28 @@
     </div>
   </section>
 
+  <!-- Screen 5: Calendario -->
+  <section id="screen-calendario" class="screen">
+    <header class="topbar">
+      <div class="cal-header-row">
+        <button id="cal-prev" class="btn btn-ghost btn-icon" type="button" aria-label="Mes anterior">‹</button>
+        <h3 class="topbar-title" id="cal-month-label">—</h3>
+        <button id="cal-next" class="btn btn-ghost btn-icon" type="button" aria-label="Mes siguiente">›</button>
+      </div>
+    </header>
+    <div class="scroll">
+      <div class="scroll-pad">
+        <div id="cal-weekday-row" class="cal-weekday-row"></div>
+        <div id="cal-grid" class="cal-grid"></div>
+        <div id="cal-day-detail"></div>
+      </div>
+    </div>
+  </section>
+
   <nav class="tabbar">
     <button data-tab="inbox" class="active" type="button">Bandeja</button>
     <button data-tab="procesos" type="button">Procesos</button>
+    <button data-tab="calendario" type="button">Calendario</button>
     <button data-tab="settings" type="button">Ajustes</button>
   </nav>
 </div>
