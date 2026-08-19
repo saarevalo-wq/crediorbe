@@ -17,6 +17,14 @@ function isDirty() {
   return JSON.stringify(draft) !== JSON.stringify(store.settings);
 }
 
+const debugLine = document.createElement("p");
+debugLine.id = "settings-debug-line";
+debugLine.style.cssText = "font-size:11px;opacity:0.55;margin-top:8px;";
+
+function setDebug(text) {
+  debugLine.textContent = text;
+}
+
 export function initSettings({ onConnected: connectedHandler }) {
   onConnected = connectedHandler;
   draft = deepClone(store.settings);
@@ -25,9 +33,42 @@ export function initSettings({ onConnected: connectedHandler }) {
     if (!isDirty()) draft = deepClone(store.settings);
     render();
   });
+
+  // Delegated listeners attached ONCE to the stable parent containers —
+  // priorityRows/notificationRadios never get replaced, only their
+  // innerHTML contents do, so this survives re-renders instead of being
+  // re-attached (and potentially lost) on every render() call.
+  priorityRows.addEventListener("change", (e) => {
+    const input = e.target;
+    if (input.tagName !== "INPUT" || input.type !== "radio") return;
+    const seg = input.closest(".seg");
+    if (!seg) return;
+    draft.priorities[seg.dataset.type] = input.value;
+    saveBtn.disabled = !isDirty();
+    setDebug(`Cambio detectado: ${seg.dataset.type} = ${input.value}`);
+  });
+
+  notificationRadios.addEventListener("change", (e) => {
+    const input = e.target;
+    if (input.tagName !== "INPUT" || input.type !== "radio") return;
+    draft.notificationMode = input.value;
+    saveBtn.disabled = !isDirty();
+    setDebug(`Cambio detectado: notificaciones = ${input.value}`);
+  });
+
+  saveBtn.insertAdjacentElement("afterend", debugLine);
+
   saveBtn.addEventListener("click", async () => {
-    store.saveSettings(deepClone(draft));
-    saveBtn.disabled = true;
+    setDebug(`Guardando… (dirty=${isDirty()})`);
+    try {
+      store.saveSettings(deepClone(draft));
+      saveBtn.disabled = true;
+      const check = JSON.parse(localStorage.getItem("crediorbe.settings.v1") || "null");
+      setDebug(`Guardado ✓ Desacato=${check?.priorities?.Desacato ?? "?"}`);
+    } catch (err) {
+      setDebug(`Error al guardar: ${err.message}`);
+      throw err;
+    }
     if (CONFIG.PUSH_BACKEND_URL) {
       // Keep the background poller's notification rules in sync with what
       // the user configured here (it can't read localStorage on the phone).
@@ -106,13 +147,6 @@ function renderPriorities() {
     </div>`
     )
     .join("");
-
-  priorityRows.querySelectorAll(".seg").forEach((seg) => {
-    seg.addEventListener("change", (e) => {
-      draft.priorities[seg.dataset.type] = e.target.value;
-      saveBtn.disabled = !isDirty();
-    });
-  });
 }
 
 function renderNotifications() {
@@ -126,11 +160,4 @@ function renderNotifications() {
     </label>`
     )
     .join("");
-
-  notificationRadios.querySelectorAll('input[name="notif-mode"]').forEach((input) => {
-    input.addEventListener("change", (e) => {
-      draft.notificationMode = e.target.value;
-      saveBtn.disabled = !isDirty();
-    });
-  });
 }
