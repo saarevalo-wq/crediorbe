@@ -1,3 +1,14 @@
+/**
+ * Deep-clones plain JSON-shaped data (no Dates/functions/circular refs, which
+ * our settings object never has). Deliberately not `structuredClone` — that
+ * global was only added in Safari 15.4, and a settings screen that silently
+ * fails to attach its Save handler on older iOS is a bad failure mode for
+ * something this core.
+ */
+export function deepClone(value) {
+  return JSON.parse(JSON.stringify(value));
+}
+
 export function escapeHtml(str) {
   return String(str ?? "").replace(/[&<>"']/g, (c) => ({
     "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;",

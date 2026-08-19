@@ -1,5 +1,5 @@
 import { store } from "../state.js";
-import { escapeHtml } from "../util.js";
+import { escapeHtml, deepClone } from "../util.js";
 import { PROCESS_TYPE_ROW_LABEL, NOTIFICATION_MODE_LABEL, ProcessType, NotificationMode } from "../models.js";
 import * as gmail from "../gmail.js";
 import { requestPermission, subscribeToPush } from "../notify.js";
@@ -19,14 +19,14 @@ function isDirty() {
 
 export function initSettings({ onConnected: connectedHandler }) {
   onConnected = connectedHandler;
-  draft = structuredClone(store.settings);
+  draft = deepClone(store.settings);
   store.subscribe(() => {
     // Only resync the draft from external changes (e.g. first load) when not mid-edit.
-    if (!isDirty()) draft = structuredClone(store.settings);
+    if (!isDirty()) draft = deepClone(store.settings);
     render();
   });
   saveBtn.addEventListener("click", async () => {
-    store.saveSettings(structuredClone(draft));
+    store.saveSettings(deepClone(draft));
     saveBtn.disabled = true;
     if (CONFIG.PUSH_BACKEND_URL) {
       // Keep the background poller's notification rules in sync with what
@@ -68,7 +68,7 @@ async function handleToggleConnect() {
   if (draft.mailbox.connected) {
     gmail.disconnect();
     draft.mailbox = { ...draft.mailbox, connected: false, email: "" };
-    store.saveSettings(structuredClone(draft));
+    store.saveSettings(deepClone(draft));
     return;
   }
   btn.disabled = true;
@@ -77,7 +77,7 @@ async function handleToggleConnect() {
     await gmail.connect();
     const profile = await gmail.fetchProfile();
     draft.mailbox = { email: profile.emailAddress, connected: true, provider: "gmail" };
-    store.saveSettings(structuredClone(draft));
+    store.saveSettings(deepClone(draft));
 
     const perm = await requestPermission();
     if (perm === "granted") await subscribeToPush().catch(() => {});
