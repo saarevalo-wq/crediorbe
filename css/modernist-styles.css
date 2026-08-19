@@ -2,12 +2,13 @@
 @import url('https://fonts.googleapis.com/css2?family=Archivo:wght@400;600;800&display=swap');
 
 :root {
-  --color-bg: #f3f2f2;
-  --color-surface: #eae9e9;
+  /* "Galgo" palette — white ground, violet accent (was orange), dark ink. */
+  --color-bg: #ffffff;
+  --color-surface: #f4f0fd;
   --color-text: #201e1d;
-  --color-accent: #ec3013;
-  --color-accent-2: #e15b47;
-  --color-divider: color-mix(in srgb, #201e1d 40%, transparent);
+  --color-accent: #6633e6;
+  --color-accent-2: #7c4dff;
+  --color-divider: color-mix(in srgb, var(--color-text) 40%, transparent);
 
   /* Tonal ramps — generated in OKLCH on one shared lightness scale, so the
      same step of any role matches the others in visual value. */
@@ -21,25 +22,25 @@
   --color-neutral-800: #444141;
   --color-neutral-900: #2d2b2b;
 
-  --color-accent-100: #fff2ef;
-  --color-accent-200: #ffe0d9;
-  --color-accent-300: #ffc4b8;
-  --color-accent-400: #ff9783;
-  --color-accent-500: #ff563c;
-  --color-accent-600: #dd2b0f;
-  --color-accent-700: #ae1800;
-  --color-accent-800: #7c1405;
-  --color-accent-900: #4d170e;
+  --color-accent-100: #f5f0ff;
+  --color-accent-200: #e6d9ff;
+  --color-accent-300: #d1b8ff;
+  --color-accent-400: #b088ff;
+  --color-accent-500: #8c5cf6;
+  --color-accent-600: #6633e6;
+  --color-accent-700: #4f22b8;
+  --color-accent-800: #3a1888;
+  --color-accent-900: #241052;
 
-  --color-accent-2-100: #fff2ef;
-  --color-accent-2-200: #ffe0da;
-  --color-accent-2-300: #ffc4b9;
-  --color-accent-2-400: #ff9784;
-  --color-accent-2-500: #ef6853;
-  --color-accent-2-600: #c94b39;
-  --color-accent-2-700: #9e3526;
-  --color-accent-2-800: #71261b;
-  --color-accent-2-900: #471d16;
+  --color-accent-2-100: #f3f0ff;
+  --color-accent-2-200: #e0d6ff;
+  --color-accent-2-300: #c4b3ff;
+  --color-accent-2-400: #a183ff;
+  --color-accent-2-500: #7c52f0;
+  --color-accent-2-600: #5f36c9;
+  --color-accent-2-700: #48279e;
+  --color-accent-2-800: #331b6e;
+  --color-accent-2-900: #1f1042;
 
   --font-heading: "Archivo", system-ui, sans-serif;
   --font-heading-weight: 800;
