@@ -103,12 +103,18 @@
     </div>
   </section>
 
-  <!-- Screen 4 (placeholder): Procesos -->
+  <!-- Screen 4: Procesos -->
   <section id="screen-procesos" class="screen">
-    <header class="topbar"><h3 class="topbar-title">Procesos</h3></header>
+    <header class="topbar">
+      <h3 class="topbar-title">Procesos</h3>
+    </header>
+    <div class="filter-row">
+      <select id="procesos-type-filter" class="input"></select>
+      <div class="topbar-hr"></div>
+    </div>
     <div class="scroll">
-      <div class="scroll-pad" style="text-align:center; opacity:.6; padding-top:64px;">
-        Pantalla pendiente de diseño.
+      <div class="scroll-pad">
+        <div id="procesos-list" class="process-list"></div>
       </div>
     </div>
   </section>

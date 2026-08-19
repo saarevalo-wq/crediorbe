@@ -8,15 +8,28 @@ import { addBusinessDays } from "./holidays-co.js";
 export const ProcessType = {
   DESACATO: "Desacato",
   TUTELA: "Tutela",
+  RESPUESTA_TUTELA: "Respuesta a tutela",
   IMPUGNACION: "Impugnación",
   DERECHO_PETICION: "Derecho de petición",
   REQUERIMIENTO: "Requerimiento",
+  DEMANDA_SIC: "Demanda SIC",
 };
 
 export const Urgency = { URGENTE: "URGENTE", ALTA: "ALTA", MEDIA: "MEDIA", BAJA: "BAJA" };
 
+// Order matters: more specific rules (requiring two signals via lookahead)
+// are checked before the generic single-keyword rules they'd otherwise be
+// shadowed by — see js/classifier.js for the full rationale.
 const TYPE_RULES = [
+  {
+    type: ProcessType.DEMANDA_SIC,
+    patterns: [/(?=[\s\S]*(?:superintendencia de industria y comercio|\bsic\b))(?=[\s\S]*demanda)/i],
+  },
   { type: ProcessType.DESACATO, patterns: [/desacato/i] },
+  {
+    type: ProcessType.RESPUESTA_TUTELA,
+    patterns: [/(?=[\s\S]*tutela)(?=[\s\S]*\b(?:responder|conteste|contestaci[oó]n|traslado|dar respuesta)\b)/i],
+  },
   { type: ProcessType.TUTELA, patterns: [/tutela/i, /acci[oó]n de tutela/i] },
   { type: ProcessType.IMPUGNACION, patterns: [/impugnaci[oó]n/i, /impugna/i, /recurso de apelaci[oó]n/i] },
   { type: ProcessType.DERECHO_PETICION, patterns: [/derecho de petici[oó]n/i, /\bpetici[oó]n\b/i] },
@@ -27,9 +40,11 @@ const URGENT_SIGNALS = [/arresto/i, /inmediat[oa]/i, /veinticuatro \(24\)/i, /24
 const BASE_URGENCY = {
   [ProcessType.DESACATO]: Urgency.ALTA,
   [ProcessType.TUTELA]: Urgency.ALTA,
+  [ProcessType.RESPUESTA_TUTELA]: Urgency.ALTA,
   [ProcessType.IMPUGNACION]: Urgency.MEDIA,
   [ProcessType.DERECHO_PETICION]: Urgency.MEDIA,
   [ProcessType.REQUERIMIENTO]: Urgency.BAJA,
+  [ProcessType.DEMANDA_SIC]: Urgency.ALTA,
 };
 
 const RANK = { URGENTE: 4, ALTA: 3, MEDIA: 2, BAJA: 1 };
@@ -48,7 +63,7 @@ function detectType(text) {
   return null;
 }
 
-function detectDeadline(text, receivedAt) {
+async function detectDeadline(text, receivedAt) {
   for (const { re, unit } of DEADLINE_PATTERNS) {
     const m = text.match(re);
     if (!m) continue;
@@ -57,7 +72,8 @@ function detectDeadline(text, receivedAt) {
     if (unit === "hours") {
       return new Date(receivedAt.getTime() + n * 3600_000).toISOString();
     }
-    return addBusinessDays(receivedAt, n).toISOString();
+    const deadline = await addBusinessDays(receivedAt, n);
+    return deadline.toISOString();
   }
   return null;
 }
@@ -74,7 +90,7 @@ function extractCaseNumber(text) {
   return m ? m[1] : "—";
 }
 
-export function classify(email, priorities) {
+export async function classify(email, priorities) {
   const text = `${email.subject}\n${email.body || email.snippet}`;
   const type = detectType(text);
   if (!type) return null;
@@ -86,6 +102,7 @@ export function classify(email, priorities) {
   urgency = applyPriorityWeight(urgency, priorities[type] || "media");
 
   const receivedAt = new Date(email.receivedAt);
+  const deadline = await detectDeadline(text, receivedAt);
   const summary = (email.snippet || text).replace(/\s+/g, " ").trim().slice(0, 180);
 
   return {
@@ -94,7 +111,7 @@ export function classify(email, priorities) {
     counterparty: email.fromName || email.from,
     urgency,
     summary,
-    deadline: detectDeadline(text, receivedAt),
+    deadline,
     receivedAt: receivedAt.toISOString(),
     read: false,
     caseNumber: extractCaseNumber(text),

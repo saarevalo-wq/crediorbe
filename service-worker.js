@@ -1,4 +1,4 @@
-const CACHE = "crediorbe-v3";
+const CACHE = "crediorbe-v4";
 const SHELL = [
   "./",
   "./index.html",
@@ -17,6 +17,7 @@ const SHELL = [
   "./js/router.js",
   "./js/mock.js",
   "./js/views/inbox.js",
+  "./js/views/procesos.js",
   "./js/views/detail.js",
   "./js/views/settings.js",
   "./icons/icon-192.png",

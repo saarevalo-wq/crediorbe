@@ -15,9 +15,11 @@ const DEFAULT_DATA = {
     priorities: {
       Desacato: "alta",
       Tutela: "alta",
+      "Respuesta a tutela": "alta",
       "Impugnación": "media",
       "Derecho de petición": "media",
       Requerimiento: "baja",
+      "Demanda SIC": "alta",
     },
     notificationMode: "top3",
   },

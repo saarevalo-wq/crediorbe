@@ -10,8 +10,23 @@
 import { ProcessType, Urgency } from "./models.js";
 import { addBusinessDays } from "./holidays-co.js";
 
+// Order matters: more specific rules (requiring two signals via lookahead)
+// are checked before the generic single-keyword rules they'd otherwise be
+// shadowed by — e.g. a "respuesta a tutela" email also contains "tutela",
+// so that rule must be tried before the plain TUTELA rule.
 const TYPE_RULES = [
+  {
+    type: ProcessType.DEMANDA_SIC,
+    patterns: [/(?=[\s\S]*(?:superintendencia de industria y comercio|\bsic\b))(?=[\s\S]*demanda)/i],
+  },
+  // Desacato is checked before "respuesta a tutela" — a desacato notice
+  // often also references the original tutela and can contain words like
+  // "traslado", and "desacato" is the more specific, definitive signal.
   { type: ProcessType.DESACATO, patterns: [/desacato/i] },
+  {
+    type: ProcessType.RESPUESTA_TUTELA,
+    patterns: [/(?=[\s\S]*tutela)(?=[\s\S]*\b(?:responder|conteste|contestaci[oó]n|traslado|dar respuesta)\b)/i],
+  },
   { type: ProcessType.TUTELA, patterns: [/tutela/i, /acci[oó]n de tutela/i] },
   { type: ProcessType.IMPUGNACION, patterns: [/impugnaci[oó]n/i, /impugna/i, /recurso de apelaci[oó]n/i] },
   { type: ProcessType.DERECHO_PETICION, patterns: [/derecho de petici[oó]n/i, /\bpetici[oó]n\b/i] },
@@ -22,9 +37,11 @@ const URGENT_SIGNALS = [/arresto/i, /inmediat[oa]/i, /veinticuatro \(24\)/i, /24
 const BASE_URGENCY = {
   [ProcessType.DESACATO]: Urgency.ALTA,
   [ProcessType.TUTELA]: Urgency.ALTA,
+  [ProcessType.RESPUESTA_TUTELA]: Urgency.ALTA,
   [ProcessType.IMPUGNACION]: Urgency.MEDIA,
   [ProcessType.DERECHO_PETICION]: Urgency.MEDIA,
   [ProcessType.REQUERIMIENTO]: Urgency.BAJA,
+  [ProcessType.DEMANDA_SIC]: Urgency.ALTA,
 };
 
 const RANK = { URGENTE: 4, ALTA: 3, MEDIA: 2, BAJA: 1 };
@@ -43,7 +60,7 @@ function detectType(text) {
   return null;
 }
 
-function detectDeadline(text, receivedAt) {
+async function detectDeadline(text, receivedAt) {
   for (const { re, unit } of DEADLINE_PATTERNS) {
     const m = text.match(re);
     if (!m) continue;
@@ -56,7 +73,8 @@ function detectDeadline(text, receivedAt) {
     // Day-based terms follow the Colombian judicial-term rule: the count
     // starts the day AFTER the email arrives, in business days only
     // (skipping weekends and holidays) — see js/holidays-co.js.
-    return addBusinessDays(receivedAt, n).toISOString();
+    const deadline = await addBusinessDays(receivedAt, n);
+    return deadline.toISOString();
   }
   return null;
 }
@@ -71,9 +89,9 @@ function applyPriorityWeight(baseUrgency, weight) {
 /**
  * @param {{id: string, subject: string, from: string, snippet: string, body: string, receivedAt: string}} email
  * @param {Record<string, 'alta'|'media'|'baja'>} priorities settings.priorities from Ajustes
- * @returns {object|null} a ProcessItem-shaped object, or null if the email doesn't look like a judicial/legal process
+ * @returns {Promise<object|null>} a ProcessItem-shaped object, or null if the email doesn't look like a judicial/legal process
  */
-export function classify(email, priorities) {
+export async function classify(email, priorities) {
   const text = `${email.subject}\n${email.body || email.snippet}`;
   const type = detectType(text);
   if (!type) return null;
@@ -85,7 +103,7 @@ export function classify(email, priorities) {
   urgency = applyPriorityWeight(urgency, priorities[type] || "media");
 
   const receivedAt = new Date(email.receivedAt);
-  const deadline = detectDeadline(text, receivedAt);
+  const deadline = await detectDeadline(text, receivedAt);
 
   const summary = (email.snippet || text).replace(/\s+/g, " ").trim().slice(0, 180);
 

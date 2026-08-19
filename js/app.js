@@ -1,6 +1,7 @@
 import { store } from "./state.js";
 import { initRouter, goTo } from "./router.js";
 import { initInbox, setInboxError } from "./views/inbox.js";
+import { initProcesos } from "./views/procesos.js";
 import { initDetail, renderDetail } from "./views/detail.js";
 import { initSettings } from "./views/settings.js";
 import { classify } from "./classifier.js";
@@ -30,6 +31,13 @@ initInbox({
   onGoToSettings: () => goTo("settings"),
 });
 
+initProcesos({
+  onOpenItem: (id) => {
+    renderDetail(id);
+    goTo("detail");
+  },
+});
+
 initDetail({ onBack: () => goTo("inbox") });
 
 initSettings({
@@ -49,7 +57,8 @@ async function refresh() {
   if (!gmail.isConnected()) return;
   try {
     const emails = await gmail.fetchJudicialEmails();
-    const classified = emails.map((e) => classify(e, store.settings.priorities)).filter(Boolean);
+    const classifiedAll = await Promise.all(emails.map((e) => classify(e, store.settings.priorities)));
+    const classified = classifiedAll.filter(Boolean);
 
     const previousIds = new Set(store.items.map((i) => i.id));
     store.setItems(classified);

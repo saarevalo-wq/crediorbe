@@ -81,7 +81,8 @@ async function pollAndNotify() {
   try {
     const settings = getSettings();
     const emails = await fetchJudicialEmails();
-    const classified = emails.map((e) => classify(e, settings.priorities)).filter(Boolean);
+    const classifiedAll = await Promise.all(emails.map((e) => classify(e, settings.priorities)));
+    const classified = classifiedAll.filter(Boolean);
 
     const seen = getSeenIds();
     const fresh = classified.filter((i) => !seen.has(i.id));

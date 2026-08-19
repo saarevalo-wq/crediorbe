@@ -4,9 +4,11 @@
 export const ProcessType = {
   DESACATO: "Desacato",
   TUTELA: "Tutela",
+  RESPUESTA_TUTELA: "Respuesta a tutela",
   IMPUGNACION: "Impugnación",
   DERECHO_PETICION: "Derecho de petición",
   REQUERIMIENTO: "Requerimiento",
+  DEMANDA_SIC: "Demanda SIC",
 };
 
 export const Urgency = {
@@ -37,9 +39,11 @@ export const NOTIFICATION_MODE_LABEL = {
 export const PROCESS_TYPE_ROW_LABEL = {
   [ProcessType.DESACATO]: "Desacatos",
   [ProcessType.TUTELA]: "Tutelas",
+  [ProcessType.RESPUESTA_TUTELA]: "Respuestas a tutela",
   [ProcessType.IMPUGNACION]: "Impugnaciones",
   [ProcessType.DERECHO_PETICION]: "Derechos de petición",
   [ProcessType.REQUERIMIENTO]: "Requerimientos",
+  [ProcessType.DEMANDA_SIC]: "Demandas SIC",
 };
 
 export function defaultSettings() {
@@ -48,9 +52,11 @@ export function defaultSettings() {
     priorities: {
       [ProcessType.DESACATO]: PriorityWeight.ALTA,
       [ProcessType.TUTELA]: PriorityWeight.ALTA,
+      [ProcessType.RESPUESTA_TUTELA]: PriorityWeight.ALTA,
       [ProcessType.IMPUGNACION]: PriorityWeight.MEDIA,
       [ProcessType.DERECHO_PETICION]: PriorityWeight.MEDIA,
       [ProcessType.REQUERIMIENTO]: PriorityWeight.BAJA,
+      [ProcessType.DEMANDA_SIC]: PriorityWeight.ALTA,
     },
     notificationMode: NotificationMode.TOP3,
   };

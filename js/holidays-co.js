@@ -1,12 +1,22 @@
-// Colombian public holidays and business-day arithmetic — computed
-// algorithmically (Easter + Ley 51/1983 "Emiliani" Monday-shifts), no
-// external API or yearly data file to maintain.
+// Colombian public holidays and business-day arithmetic.
+//
+// Hybrid source: tries a live public holidays API first (to automatically
+// pick up any future law change), falls back to an algorithmic computation
+// (Easter + Ley 51/1983 "Emiliani" Monday-shifts) if offline or the API is
+// unreachable. Entries from the API matching KNOWN_BAD_HOLIDAY_NAMES are
+// dropped — cross-checking the API against the algorithm found it reports a
+// "Día de la Virgen de Chiquinquirá" for Colombia that isn't one of the
+// country's 18 official holidays; everything else matched exactly.
 //
 // All calendar-day math happens in Bogotá local time (UTC-5, no DST) so a
 // judicial email that lands at 11pm UTC on a Friday is still correctly
 // treated as Friday, not Saturday.
 
 const BOGOTA_OFFSET_MS = 5 * 3600_000;
+const API_URL = (year) => `https://date.nager.at/api/v3/publicholidays/${year}/CO`;
+const CACHE_PREFIX = "crediorbe.holidays.co.";
+const CACHE_TTL_MS = 30 * 86_400_000; // 30 days
+const KNOWN_BAD_HOLIDAY_NAMES = [/chiquinquir[aá]/i];
 
 function toBogotaCalendarDay(date) {
   const shifted = new Date(date.getTime() - BOGOTA_OFFSET_MS);
@@ -49,27 +59,16 @@ function easterSunday(year) {
   return new Date(Date.UTC(year, month - 1, day));
 }
 
-const holidayCache = new Map();
-
-function colombianHolidays(year) {
-  if (holidayCache.has(year)) return holidayCache.get(year);
-
+/** Algorithmic fallback — verified against Ley 51/1983 (18 official holidays). */
+function computeAlgorithmic(year) {
   const easter = easterSunday(year);
 
-  // Fixed dates — never shifted.
   const fixed = [
-    [1, 1], // Año Nuevo
-    [5, 1], // Día del Trabajo
-    [7, 20], // Independencia
-    [8, 7], // Batalla de Boyacá
-    [12, 8], // Inmaculada Concepción
-    [12, 25], // Navidad
+    [1, 1], [5, 1], [7, 20], [8, 7], [12, 8], [12, 25],
   ].map(([m, d]) => new Date(Date.UTC(year, m - 1, d)));
 
-  // Tied to Easter, but not shifted to Monday.
   const holyWeek = [addDays(easter, -3), addDays(easter, -2)]; // Jueves y Viernes Santo
 
-  // "Ley Emiliani" — shifted to the following Monday if not already one.
   const emiliani = [
     new Date(Date.UTC(year, 0, 6)), // Reyes Magos
     new Date(Date.UTC(year, 2, 19)), // San José
@@ -83,21 +82,64 @@ function colombianHolidays(year) {
     new Date(Date.UTC(year, 10, 11)), // Independencia de Cartagena
   ].map(nextMonday);
 
-  const set = new Set([...fixed, ...holyWeek, ...emiliani].map(ymd));
-  holidayCache.set(year, set);
-  return set;
+  return new Set([...fixed, ...holyWeek, ...emiliani].map(ymd));
 }
 
-export function isColombianHoliday(date) {
+async function fetchApiHolidayDates(year) {
+  const res = await fetch(API_URL(year));
+  if (!res.ok) throw new Error(`holidays API returned ${res.status}`);
+  const data = await res.json();
+  return data
+    .filter((h) => !KNOWN_BAD_HOLIDAY_NAMES.some((re) => re.test(h.localName || h.name || "")))
+    .map((h) => h.date);
+}
+
+const memoryCache = new Map();
+
+async function getHolidaySet(year) {
+  if (memoryCache.has(year)) return memoryCache.get(year);
+
+  const algorithmic = computeAlgorithmic(year);
+
+  const cacheKey = CACHE_PREFIX + year;
+  try {
+    const stored = JSON.parse(localStorage.getItem(cacheKey) || "null");
+    if (stored && Date.now() - stored.ts < CACHE_TTL_MS) {
+      const merged = new Set([...algorithmic, ...stored.dates]);
+      memoryCache.set(year, merged);
+      return merged;
+    }
+  } catch {
+    // corrupt cache entry — ignore and refetch
+  }
+
+  let merged;
+  try {
+    const apiDates = await fetchApiHolidayDates(year);
+    merged = new Set([...algorithmic, ...apiDates]);
+    localStorage.setItem(cacheKey, JSON.stringify({ dates: apiDates, ts: Date.now() }));
+  } catch {
+    // offline or API unreachable — the verified algorithmic set alone is
+    // still correct for the current 18 official holidays.
+    merged = algorithmic;
+  }
+
+  memoryCache.set(year, merged);
+  return merged;
+}
+
+export async function isColombianHoliday(date) {
   const day = toBogotaCalendarDay(date);
-  return colombianHolidays(day.getUTCFullYear()).has(ymd(day));
+  const set = await getHolidaySet(day.getUTCFullYear());
+  return set.has(ymd(day));
 }
 
-export function isBusinessDay(date) {
+export async function isBusinessDay(date) {
   const day = toBogotaCalendarDay(date);
   const weekday = day.getUTCDay();
   if (weekday === 0 || weekday === 6) return false; // Sun/Sat
-  return !colombianHolidays(day.getUTCFullYear()).has(ymd(day));
+  const set = await getHolidaySet(day.getUTCFullYear());
+  return !set.has(ymd(day));
 }
 
 /**
@@ -106,22 +148,23 @@ export function isBusinessDay(date) {
  * holidays), and lands on the Nth business day. Returns that day at 5:00pm
  * Bogotá time (17:00 -05:00), the conventional end-of-business-day cutoff.
  */
-export function addBusinessDays(fromDate, n) {
+export async function addBusinessDays(fromDate, n) {
   let day = addDays(toBogotaCalendarDay(fromDate), 1);
-  while (isWeekendOrHoliday(day)) day = addDays(day, 1);
+  while (await isWeekendOrHoliday(day)) day = addDays(day, 1);
 
   let remaining = n - 1; // the first business day found above counts as day 1
   while (remaining > 0) {
     day = addDays(day, 1);
-    if (!isWeekendOrHoliday(day)) remaining--;
+    if (!(await isWeekendOrHoliday(day))) remaining--;
   }
 
   // day is a Bogotá-midnight UTC marker; convert to 5:00pm Bogotá (=22:00 UTC).
   return new Date(Date.UTC(day.getUTCFullYear(), day.getUTCMonth(), day.getUTCDate(), 22, 0, 0));
 }
 
-function isWeekendOrHoliday(bogotaCalendarDay) {
+async function isWeekendOrHoliday(bogotaCalendarDay) {
   const weekday = bogotaCalendarDay.getUTCDay();
   if (weekday === 0 || weekday === 6) return true;
-  return colombianHolidays(bogotaCalendarDay.getUTCFullYear()).has(ymd(bogotaCalendarDay));
+  const set = await getHolidaySet(bogotaCalendarDay.getUTCFullYear());
+  return set.has(ymd(bogotaCalendarDay));
 }
