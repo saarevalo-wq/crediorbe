@@ -4,6 +4,7 @@
 
 html, body {
   height: 100%;
+  height: 100dvh; /* iOS standalone mode sizes 100% unreliably; dvh is the fix */
   overscroll-behavior: none;
 }
 body {
@@ -11,7 +12,10 @@ body {
   flex-direction: column;
   -webkit-font-smoothing: antialiased;
   padding-top: env(safe-area-inset-top);
-  padding-bottom: env(safe-area-inset-bottom);
+  /* No padding-bottom here — the tab bar and the detail action bar are the
+     elements that actually touch the bottom edge, so they own the
+     safe-area-inset-bottom padding themselves. Adding it here too double-
+     counts it and pushes content up further than the real inset. */
 }
 
 #app {
