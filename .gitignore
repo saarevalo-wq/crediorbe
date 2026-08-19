@@ -1,0 +1,6 @@
+.DS_Store
+Thumbs.db
+.firebase/
+server/node_modules/
+server/.env
+server/data.json
