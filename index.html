@@ -129,6 +129,39 @@
 <div id="toast"></div>
 
 <!-- Google Identity Services (client-side OAuth for Gmail) -->
+<script>
+  // Catches any uncaught error/rejection — including ones during module
+  // load, before app.js's own code runs — and shows it directly on screen.
+  // There's no way to remote-debug an iPhone without a Mac, so surfacing
+  // errors visibly here is how we find out what's actually failing.
+  (function () {
+    var shown = false;
+    function showFatalError(text) {
+      if (shown) return; // only show the first one — avoids stacking banners
+      shown = true;
+      var el = document.createElement("div");
+      el.style.cssText =
+        "position:fixed;inset:0;z-index:99999;background:#fff;color:#111;" +
+        "font:13px/1.5 -apple-system,sans-serif;padding:16px;overflow:auto;" +
+        "white-space:pre-wrap;word-break:break-word;";
+      el.textContent = "Error en Crediorbe — copia este texto y envíalo:\n\n" + text;
+      var btn = document.createElement("button");
+      btn.textContent = "Cerrar";
+      btn.style.cssText = "display:block;margin-top:16px;padding:10px 16px;font-size:14px;";
+      btn.onclick = function () { el.remove(); };
+      el.appendChild(btn);
+      document.body.appendChild(el);
+    }
+    window.addEventListener("error", function (e) {
+      showFatalError((e.message || "Error desconocido") + "\n@ " + (e.filename || "?") + ":" + (e.lineno || "?"));
+    });
+    window.addEventListener("unhandledrejection", function (e) {
+      var reason = e.reason;
+      var text = reason && reason.stack ? reason.stack : (reason && reason.message) || String(reason);
+      showFatalError("Promise rejection:\n" + text);
+    });
+  })();
+</script>
 <script src="https://accounts.google.com/gsi/client" async defer></script>
 <script type="module" src="js/app.js"></script>
 </body>
