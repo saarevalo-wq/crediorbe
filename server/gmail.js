@@ -6,9 +6,9 @@ const SEARCH_QUERY =
   'OR subject:tutela OR subject:desacato OR subject:impugnación OR subject:impugnacion ' +
   'OR subject:"derecho de petición" OR subject:peticion OR subject:requerimiento) newer_than:60d';
 
-function client() {
-  const refreshToken = getRefreshToken();
-  if (!refreshToken) throw new Error("No hay refresh token guardado. Corre `npm run auth` primero.");
+async function client() {
+  const refreshToken = await getRefreshToken();
+  if (!refreshToken) throw new Error("No hay refresh token guardado. Visita /auth/google primero.");
   const oauth2Client = new google.auth.OAuth2(
     process.env.GOOGLE_CLIENT_ID,
     process.env.GOOGLE_CLIENT_SECRET,
@@ -49,7 +49,7 @@ function parseFrom(fromHeader) {
 }
 
 export async function fetchJudicialEmails({ maxResults = 25 } = {}) {
-  const gmail = client();
+  const gmail = await client();
   const list = await gmail.users.messages.list({ userId: "me", q: SEARCH_QUERY, maxResults });
   const ids = (list.data.messages || []).map((m) => m.id);
 

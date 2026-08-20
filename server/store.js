@@ -1,12 +1,17 @@
-// Minimal JSON-file persistence — this server is meant for a single person's
-// mailbox, so a flat file is enough. Swap for a real database if you ever
-// need multi-user support.
-import fs from "fs";
-import path from "path";
-import { fileURLToPath } from "url";
+// Firestore-backed persistence. A local JSON file (the original design)
+// doesn't survive Cloud Run's scale-to-zero — each cold start gets a fresh,
+// empty filesystem — so this needs a real database instead. Everything
+// lives in a single document since this server is single-user.
+//
+// Uses Application Default Credentials: on Cloud Run this is automatic via
+// the service's own identity (needs the "Cloud Datastore User" role — see
+// server/README.md). No service account key file needed.
+import { initializeApp, applicationDefault } from "firebase-admin/app";
+import { getFirestore } from "firebase-admin/firestore";
 
-const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const DATA_FILE = path.join(__dirname, "data.json");
+initializeApp({ credential: applicationDefault() });
+const db = getFirestore();
+const docRef = db.collection("crediorbe").doc("state");
 
 const DEFAULT_DATA = {
   refreshToken: null,
@@ -26,60 +31,57 @@ const DEFAULT_DATA = {
   seenIds: [], // Gmail message ids already considered for a push
 };
 
-function readAll() {
-  if (!fs.existsSync(DATA_FILE)) return structuredClone(DEFAULT_DATA);
-  try {
-    return { ...structuredClone(DEFAULT_DATA), ...JSON.parse(fs.readFileSync(DATA_FILE, "utf8")) };
-  } catch {
-    return structuredClone(DEFAULT_DATA);
-  }
+async function readAll() {
+  const snap = await docRef.get();
+  if (!snap.exists) return structuredClone(DEFAULT_DATA);
+  return { ...structuredClone(DEFAULT_DATA), ...snap.data() };
 }
 
-function writeAll(data) {
-  fs.writeFileSync(DATA_FILE, JSON.stringify(data, null, 2));
+async function writeAll(data) {
+  await docRef.set(data);
 }
 
-export function getRefreshToken() {
-  return readAll().refreshToken;
+export async function getRefreshToken() {
+  return (await readAll()).refreshToken;
 }
-export function setRefreshToken(token) {
-  const data = readAll();
+export async function setRefreshToken(token) {
+  const data = await readAll();
   data.refreshToken = token;
-  writeAll(data);
+  await writeAll(data);
 }
 
-export function addSubscription(sub) {
-  const data = readAll();
+export async function addSubscription(sub) {
+  const data = await readAll();
   const exists = data.subscriptions.some((s) => s.endpoint === sub.endpoint);
   if (!exists) data.subscriptions.push(sub);
-  writeAll(data);
+  await writeAll(data);
 }
-export function removeSubscription(endpoint) {
-  const data = readAll();
+export async function removeSubscription(endpoint) {
+  const data = await readAll();
   data.subscriptions = data.subscriptions.filter((s) => s.endpoint !== endpoint);
-  writeAll(data);
+  await writeAll(data);
 }
-export function getSubscriptions() {
-  return readAll().subscriptions;
+export async function getSubscriptions() {
+  return (await readAll()).subscriptions;
 }
 
-export function getSettings() {
-  return readAll().settings;
+export async function getSettings() {
+  return (await readAll()).settings;
 }
-export function setSettings(settings) {
-  const data = readAll();
+export async function setSettings(settings) {
+  const data = await readAll();
   data.settings = settings;
-  writeAll(data);
+  await writeAll(data);
 }
 
-export function getSeenIds() {
-  return new Set(readAll().seenIds);
+export async function getSeenIds() {
+  return new Set((await readAll()).seenIds);
 }
-export function addSeenIds(ids) {
-  const data = readAll();
+export async function addSeenIds(ids) {
+  const data = await readAll();
   const set = new Set(data.seenIds);
   ids.forEach((id) => set.add(id));
-  // Keep the last 500 to bound file growth.
+  // Keep the last 500 to bound document growth.
   data.seenIds = [...set].slice(-500);
-  writeAll(data);
+  await writeAll(data);
 }

@@ -4,9 +4,9 @@ export const CONFIG = {
   // (type "Web application"). See SETUP.md §1.
   GOOGLE_CLIENT_ID: "811686460443-86r94592ibfv48bs709jpopf0jo242kf.apps.googleusercontent.com",
 
-  // Only used if you deploy the optional backend for real background push
-  // notifications (server/ folder). Leave as-is if you're only using
-  // foreground notifications. See SETUP.md §3.
+  // Backend for real background push notifications (server/ folder,
+  // deployed to Cloud Run). PUSH_BACKEND_URL gets filled in once the first
+  // deploy gives us the actual service URL — see server/README.md.
   PUSH_BACKEND_URL: "",
-  VAPID_PUBLIC_KEY: "",
+  VAPID_PUBLIC_KEY: "BD7UJu-wBpnChtgnm8VyGTjXAzzhSIrEdkbthWDjwz7Japj8jE2AqSVpopGP_lUvN0Jt0vcvVA7q5vwGtNgebWg",
 };

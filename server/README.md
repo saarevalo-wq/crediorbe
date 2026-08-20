@@ -1,70 +1,89 @@
-# Servidor de push (opcional)
+# Servidor de push (notificaciones reales, con el teléfono bloqueado)
 
 Sin este servidor, Crediorbe funciona igual: se conecta a Gmail, clasifica y
-te avisa **mientras la tengas abierta**. Este servidor es solo para el salto
-a notificaciones reales **con el teléfono bloqueado o la app cerrada** — eso
-en iOS únicamente lo puede disparar un servidor real (Apple no permite que
-JavaScript en el navegador programe una notificación futura).
+te avisa **mientras la tengas abierta**. Este servidor es el salto a
+notificaciones **con el teléfono bloqueado o la app cerrada** — en iOS eso
+únicamente lo puede disparar un servidor real corriendo por su cuenta.
 
-Qué hace: cada `POLL_CRON` minutos, revisa el correo con un token propio
-(no depende de que abras la app), clasifica los nuevos correos, y le manda un
-push a cada dispositivo suscrito vía el Push API estándar (VAPID).
+Corre en **Cloud Run** (dentro del mismo proyecto `crediorbeapp` de Google
+que ya tienes), con **Firestore** guardando el estado y **Cloud Scheduler**
+despertándolo cada 15 minutos a revisar el correo. Todo dentro de la capa
+gratuita de Google Cloud para este volumen de uso. El despliegue es
+automático vía GitHub Actions — nunca necesitas Node ni `gcloud` en tu
+computador.
 
-## 1. Instalar
-```bash
-cd server
-npm install
-cp .env.example .env
-```
+## Configuración (una sola vez)
 
-## 2. Credenciales de Google (server-side)
-Reutiliza el mismo Client ID de `../SETUP.md` §1, pero aquí también necesitas
-el **Client Secret** (Google Cloud Console → tu OAuth Client → "Client secret").
-Agrega también un Redirect URI para este servidor:
-`http://localhost:8788/auth/google/callback` (Authorized redirect URIs en el
-mismo OAuth Client). Completa `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET` y
-`GOOGLE_REDIRECT_URI` en `.env`.
+### 1. Habilitar las APIs necesarias
+Abre cada uno de estos links y dale **"Habilitar"**:
+- [Cloud Run API](https://console.cloud.google.com/apis/library/run.googleapis.com?project=crediorbeapp)
+- [Cloud Build API](https://console.cloud.google.com/apis/library/cloudbuild.googleapis.com?project=crediorbeapp)
+- [Artifact Registry API](https://console.cloud.google.com/apis/library/artifactregistry.googleapis.com?project=crediorbeapp)
+- [Firestore API](https://console.cloud.google.com/apis/library/firestore.googleapis.com?project=crediorbeapp)
+- [Cloud Scheduler API](https://console.cloud.google.com/apis/library/cloudscheduler.googleapis.com?project=crediorbeapp)
 
-## 3. Conectar Gmail (una sola vez)
-```bash
-npm run auth
-```
-Abre la URL que imprime, inicia sesión con la cuenta a monitorear, acepta el
-permiso. Esto guarda un refresh token en `data.json` (nunca lo subas a git —
-ya está en `.gitignore`).
+### 2. Crear la base de datos de Firestore
+Ve a [console.cloud.google.com/firestore](https://console.cloud.google.com/firestore/databases?project=crediorbeapp) →
+**"Crear base de datos"** → modo **Nativo** → elige una región (ej.
+`us-central1`, la misma que usaremos para Cloud Run) → Crear.
 
-## 4. Claves VAPID (para el Push API)
-```bash
-npm run vapid
-```
-Copia `Public Key` y `Private Key` a `.env`. Copia también la Public Key a
-`../js/config.js` → `CONFIG.VAPID_PUBLIC_KEY`, y la URL donde termines
-desplegando este servidor a `CONFIG.PUSH_BACKEND_URL`.
+### 3. Crear la cuenta de servicio para el despliegue
+Ve a [IAM y administración → Cuentas de servicio](https://console.cloud.google.com/iam-admin/serviceaccounts?project=crediorbeapp) →
+**"Crear cuenta de servicio"**:
+- Nombre: `github-deployer`
+- Roles a agregar (uno por uno, en el paso 2 del asistente): **Editor**,
+  **Administrador de Cloud Run**, **Administrador de Cloud Scheduler**,
+  **Usuario de cuenta de servicio**
+- Termina el asistente.
 
-## 5. Correr
-```bash
-npm start
-```
+Luego, dentro de esa cuenta de servicio → pestaña **"Claves"** →
+**"Agregar clave"** → **"Crear clave nueva"** → tipo **JSON** → se descarga
+un archivo `.json`. Ese archivo es una credencial sensible — trátalo como
+una contraseña.
 
-## 6. Desplegar (para que corra sin tu computador prendido)
-Cualquier host de Node sirve — ej. [Render.com](https://render.com) (free
-tier de Web Service):
-1. Sube `server/` a un repo de GitHub.
-2. En Render: New → Web Service → conecta el repo, root directory `server/`,
-   build command `npm install`, start command `npm start`.
-3. Agrega las variables de entorno de `.env` en el dashboard de Render
-   (incluye `GOOGLE_REDIRECT_URI` apuntando a tu URL de Render:
-   `https://tu-app.onrender.com/auth/google/callback`, y agrégala también como
-   Authorized redirect URI en Google Cloud).
-4. Corre `npm run auth` una vez apuntando a esa URL desplegada (puedes
-   correrlo localmente con `GOOGLE_REDIRECT_URI` en modo local para generar
-   el token, y luego subir `data.json` una sola vez, o correr `auth.js` desde
-   la shell de Render).
-5. El free tier de Render "duerme" el servicio tras inactividad — como este
-   servidor no recibe tráfico de usuarios (solo cron interno), considera un
-   plan pago o un servicio con cron activo (Railway, Fly.io) para que el
-   `POLL_CRON` no se detenga.
+### 4. Agregar los secretos en GitHub
+Ve a [github.com/saarevalo-wq/crediorbe/settings/secrets/actions](https://github.com/saarevalo-wq/crediorbe/settings/secrets/actions) →
+**"New repository secret"** por cada uno de estos:
+
+| Secreto | Valor |
+|---|---|
+| `GCP_SERVICE_ACCOUNT_KEY` | Todo el contenido del `.json` descargado en el paso 3 |
+| `GOOGLE_CLIENT_ID` | El mismo Client ID de la app web (te lo pasé cuando lo creamos) |
+| `GOOGLE_CLIENT_SECRET` | El "Secreto del cliente" que viste al crear el OAuth Client |
+| `VAPID_PUBLIC_KEY` | `BD7UJu-wBpnChtgnm8VyGTjXAzzhSIrEdkbthWDjwz7Japj8jE2AqSVpopGP_lUvN0Jt0vcvVA7q5vwGtNgebWg` |
+| `VAPID_PRIVATE_KEY` | (te la doy por aparte, es privada — no va en este archivo) |
+| `POLL_SECRET` | (te lo doy por aparte también) |
+| `GOOGLE_REDIRECT_URI` | Déjalo vacío por ahora — se completa en el paso 6, después del primer despliegue |
+
+### 5. Primer despliegue
+Con los secretos puestos, avísame y hago `git push` — eso dispara el
+despliegue a Cloud Run automáticamente. Al terminar, el workflow imprime la
+URL del servicio (algo como `https://crediorbe-server-xxxxx-uc.a.run.app`).
+
+### 6. Cerrar el círculo del login de Gmail
+Con la URL del paso 5:
+1. Ve a [Credenciales](https://console.cloud.google.com/apis/credentials?project=crediorbeapp) →
+   abre tu OAuth Client ("Crediorbe Web") → en **"URIs de redireccionamiento
+   autorizados"** agrega: `https://TU-URL-DE-CLOUD-RUN/auth/google/callback`
+2. Actualiza el secreto `GOOGLE_REDIRECT_URI` en GitHub con esa misma URL.
+3. Avísame para volver a desplegar (así el servidor ya conoce esa URL).
+4. Abre `https://TU-URL-DE-CLOUD-RUN/auth/google` en tu navegador, inicia
+   sesión con la cuenta de Gmail a monitorear, acepta el permiso — el
+   servidor guarda el token en Firestore automáticamente. No necesitas
+   ningún comando ni Node en tu computador para este paso.
+
+### 7. Crear el aviso periódico (Cloud Scheduler)
+El workflow de despliegue ya lo crea/actualiza automáticamente cada vez que
+se despliega — revisa cada 15 minutos. Puedes verlo en
+[Cloud Scheduler](https://console.cloud.google.com/cloudscheduler?project=crediorbeapp).
+
+### 8. Conectar la app con este servidor
+Una vez tengas la URL de Cloud Run, dímela — la pongo en
+`js/config.js` → `CONFIG.PUSH_BACKEND_URL` y despliego la app de nuevo. A
+partir de ahí, cuando conectes Gmail en Ajustes, la app también se suscribe
+a push real automáticamente.
 
 ## Nota de seguridad
-`data.json` contiene tu refresh token de Gmail — trátalo como una contraseña.
-No lo subas a git, no lo compartas.
+Firestore guarda tu refresh token de Gmail — es equivalente a una
+contraseña de solo lectura de tu correo. La cuenta de servicio de Cloud Run
+es la única con acceso; no lo compartas.
