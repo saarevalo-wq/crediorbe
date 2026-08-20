@@ -2,7 +2,7 @@
 export const CONFIG = {
   // Google Cloud Console → APIs & Services → Credentials → OAuth 2.0 Client ID
   // (type "Web application"). See SETUP.md §1.
-  GOOGLE_CLIENT_ID: "REEMPLAZA_CON_TU_CLIENT_ID.apps.googleusercontent.com",
+  GOOGLE_CLIENT_ID: "811686460443-86r94592ibfv48bs709jpopf0jo242kf.apps.googleusercontent.com",
 
   // Only used if you deploy the optional backend for real background push
   // notifications (server/ folder). Leave as-is if you're only using
