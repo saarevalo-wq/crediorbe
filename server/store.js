@@ -1,17 +1,14 @@
-// Firestore-backed persistence. A local JSON file (the original design)
-// doesn't survive Cloud Run's scale-to-zero — each cold start gets a fresh,
-// empty filesystem — so this needs a real database instead. Everything
-// lives in a single document since this server is single-user.
-//
-// Uses Application Default Credentials: on Cloud Run this is automatic via
-// the service's own identity (needs the "Cloud Datastore User" role — see
-// server/README.md). No service account key file needed.
-import { initializeApp, applicationDefault } from "firebase-admin/app";
-import { getFirestore } from "firebase-admin/firestore";
+// Upstash Redis persistence (REST-based, no connection pooling needed —
+// works well from a serverless/scale-to-zero style host like Render's free
+// tier). Everything lives under one key since this server is single-user.
+import { Redis } from "@upstash/redis";
 
-initializeApp({ credential: applicationDefault() });
-const db = getFirestore();
-const docRef = db.collection("crediorbe").doc("state");
+const redis = new Redis({
+  url: process.env.UPSTASH_REDIS_REST_URL,
+  token: process.env.UPSTASH_REDIS_REST_TOKEN,
+});
+
+const KEY = "crediorbe:state";
 
 const DEFAULT_DATA = {
   refreshToken: null,
@@ -32,13 +29,13 @@ const DEFAULT_DATA = {
 };
 
 async function readAll() {
-  const snap = await docRef.get();
-  if (!snap.exists) return structuredClone(DEFAULT_DATA);
-  return { ...structuredClone(DEFAULT_DATA), ...snap.data() };
+  const stored = await redis.get(KEY);
+  if (!stored) return structuredClone(DEFAULT_DATA);
+  return { ...structuredClone(DEFAULT_DATA), ...stored };
 }
 
 async function writeAll(data) {
-  await docRef.set(data);
+  await redis.set(KEY, data);
 }
 
 export async function getRefreshToken() {
@@ -81,7 +78,7 @@ export async function addSeenIds(ids) {
   const data = await readAll();
   const set = new Set(data.seenIds);
   ids.forEach((id) => set.add(id));
-  // Keep the last 500 to bound document growth.
+  // Keep the last 500 to bound the stored blob's size.
   data.seenIds = [...set].slice(-500);
   await writeAll(data);
 }
