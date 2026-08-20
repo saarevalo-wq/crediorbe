@@ -1,4 +1,4 @@
-const CACHE = "crediorbe-v10";
+const CACHE = "crediorbe-v11";
 const SHELL = [
   "./",
   "./index.html",
