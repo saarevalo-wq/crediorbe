@@ -90,7 +90,14 @@ function extractCaseNumber(text) {
   return m ? m[1] : "—";
 }
 
-export async function classify(email, priorities) {
+/**
+ * Keyword/regex fallback — used only if the AI classifier is unavailable
+ * (no ANTHROPIC_API_KEY configured yet, or the API call failed). It can't
+ * read attachments, so it misses the real motivo/contraparte/plazo when
+ * those only live in the auto admisorio adjunto — that's the whole reason
+ * classifyWithAI (./ai-classifier.js) exists and is tried first.
+ */
+export async function classifyHeuristic(email, priorities) {
   const text = `${email.subject}\n${email.body || email.snippet}`;
   const type = detectType(text);
   if (!type) return null;
@@ -109,6 +116,7 @@ export async function classify(email, priorities) {
     id: email.id,
     type,
     counterparty: email.fromName || email.from,
+    motivoVinculacion: null,
     urgency,
     summary,
     deadline,
@@ -118,5 +126,21 @@ export async function classify(email, priorities) {
     senderEmail: email.from,
     aiSummaryPoints: [summary],
     originalEmailExcerpt: (email.body || email.snippet || "").replace(/\s+/g, " ").trim().slice(0, 500),
+    hadAttachments: (email.attachments?.length || 0) > 0,
+    classifiedBy: "heuristic",
   };
+}
+
+export async function classify(email, priorities) {
+  if (!process.env.ANTHROPIC_API_KEY) {
+    return classifyHeuristic(email, priorities);
+  }
+  try {
+    const { classifyWithAI } = await import("./ai-classifier.js");
+    const result = await classifyWithAI(email, priorities);
+    return result ? { ...result, classifiedBy: "ai" } : null;
+  } catch (err) {
+    console.error(`[classify] Falló la IA para el correo ${email.id}, usando reglas de respaldo:`, err.message);
+    return classifyHeuristic(email, priorities);
+  }
 }

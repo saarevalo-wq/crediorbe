@@ -27,9 +27,28 @@ if (process.env.VAPID_PUBLIC_KEY && process.env.VAPID_PRIVATE_KEY) {
 
 const app = express();
 app.use(cors());
-app.use(express.json());
+// Raised from the default 100kb: emails can carry PDF/image attachments as
+// base64, which the client-side flow (js/gmail.js → POST /classify) sends
+// in the request body since it can't hold the Anthropic API key itself.
+app.use(express.json({ limit: "40mb" }));
 
 app.get("/health", async (_req, res) => res.json({ ok: true, gmailConnected: !!(await getRefreshToken()) }));
+
+// ---- Classify a single email (used by the browser client, which can read
+// Gmail directly with the user's own OAuth token but can't hold the
+// Anthropic API key). Stateless: the caller sends the email + attachments
+// it already fetched, we return the classification. ----
+app.post("/classify", async (req, res) => {
+  const { email, priorities } = req.body || {};
+  if (!email?.id) return res.status(400).json({ error: "Falta 'email' en el body." });
+  try {
+    const item = await classify(email, priorities || (await getSettings()).priorities);
+    res.json({ item });
+  } catch (err) {
+    console.error("[classify] error:", err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
 
 // ---- One-time Gmail connection (visit /auth/google once in a browser —
 // no local Node/CLI needed, this runs entirely on the deployed server) ----

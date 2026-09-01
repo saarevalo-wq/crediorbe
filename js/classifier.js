@@ -111,6 +111,7 @@ export async function classify(email, priorities) {
     id: email.id,
     type,
     counterparty: email.fromName || email.from,
+    motivoVinculacion: null, // esto solo lo detecta el clasificador con IA leyendo el adjunto — ver js/app.js classifyOne()
     urgency,
     summary,
     deadline,
@@ -120,6 +121,8 @@ export async function classify(email, priorities) {
     senderEmail: email.from,
     aiSummaryPoints: [summary],
     originalEmailExcerpt: (email.body || email.snippet || "").replace(/\s+/g, " ").trim().slice(0, 500),
+    hadAttachments: (email.attachments?.length || 0) > 0,
+    classifiedBy: "heuristic",
   };
 }
 

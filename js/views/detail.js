@@ -31,6 +31,15 @@ export function renderDetail(id) {
 
     <div class="hr"></div>
 
+    ${
+      item.motivoVinculacion
+        ? `<span class="kicker">Motivo de vinculación</span>
+           <div class="card" style="margin-bottom:16px;"><p style="margin:0;font-size:13.5px;">${escapeHtml(item.motivoVinculacion)}</p></div>`
+        : !item.hadAttachments
+        ? `<div class="card" style="margin-bottom:16px; opacity:0.75;"><p style="margin:0;font-size:13px;">Este correo no traía documentos adjuntos, así que no se pudo determinar el motivo exacto de vinculación.</p></div>`
+        : ""
+    }
+
     <span class="kicker">Resumen IA</span>
     ${item.aiSummaryPoints.map((p) => `<div class="card" style="margin-bottom:8px;"><p style="margin:0;font-size:13.5px;">${escapeHtml(p)}</p></div>`).join("")}
 

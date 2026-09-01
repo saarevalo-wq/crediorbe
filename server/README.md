@@ -79,3 +79,30 @@ Ajustes, la app también se suscribe a push real automáticamente.
 Upstash guarda tu refresh token de Gmail — es equivalente a una contraseña
 de solo lectura de tu correo. Solo el servidor de Render (con el token que
 le diste) tiene acceso; no compartas las variables de entorno.
+
+## Clasificación con IA (lee los adjuntos)
+
+Antes, la app solo miraba el asunto y el cuerpo del correo con reglas por
+palabras clave — pero la información real (por qué nos vinculan, quién es
+la contraparte, cuándo se vence) casi siempre está en el **auto admisorio
+adjunto**, no en el correo. Ahora el servidor le manda el correo completo
++ los documentos adjuntos (PDF o imagen, escaneados o no) a Claude para que
+los lea y extraiga esa información.
+
+**Para activarlo**, agrega esta variable de entorno en Render (Dashboard →
+tu servicio → Environment):
+
+| Variable | Valor |
+|---|---|
+| `ANTHROPIC_API_KEY` | Tu llave de [console.anthropic.com](https://console.anthropic.com) → API Keys → Create Key (empieza con `sk-ant-...`) |
+
+Sin esta variable, el servidor sigue funcionando pero cae de vuelta a las
+reglas por palabras clave de antes (no lee adjuntos). Con ella puesta, no
+hace falta ningún otro cambio — Render redespliega solo al guardar la
+variable, y desde ese momento cada correo nuevo se clasifica leyendo sus
+adjuntos.
+
+Nota de costo: cada correo clasificado es una llamada a la API de
+Anthropic (se cobra por uso, con saldo prepagado en su consola) — el
+volumen de un buzón normal de notificaciones judiciales es bajo, pero si
+el buzón recibe muchísimo correo vale la pena vigilar el consumo ahí.

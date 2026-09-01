@@ -48,6 +48,48 @@ function parseFrom(fromHeader) {
   return { name: fromHeader, email: fromHeader };
 }
 
+// Attachment types Claude can read directly (PDF via its document blocks —
+// text-based or scanned, no separate OCR step needed — and common image
+// formats via image blocks, for admisorios sent as a photo/screenshot).
+const READABLE_ATTACHMENT_MIME = new Set([
+  "application/pdf",
+  "image/png",
+  "image/jpeg",
+  "image/webp",
+]);
+const MAX_ATTACHMENTS_PER_EMAIL = 5;
+const MAX_ATTACHMENT_BYTES = 15 * 1024 * 1024; // Claude's per-document limit is ~32MB; keep well under it.
+
+/** Recursively walks a Gmail message payload collecting attachment refs (filename + attachmentId). */
+function collectAttachmentParts(payload, out = []) {
+  if (!payload) return out;
+  if (payload.filename && payload.body?.attachmentId && READABLE_ATTACHMENT_MIME.has(payload.mimeType)) {
+    out.push({ filename: payload.filename, mimeType: payload.mimeType, attachmentId: payload.body.attachmentId });
+  }
+  if (payload.parts) payload.parts.forEach((p) => collectAttachmentParts(p, out));
+  return out;
+}
+
+async function fetchAttachments(gmail, messageId, payload) {
+  const refs = collectAttachmentParts(payload).slice(0, MAX_ATTACHMENTS_PER_EMAIL);
+  const attachments = [];
+  for (const ref of refs) {
+    try {
+      const { data } = await gmail.users.messages.attachments.get({
+        userId: "me",
+        messageId,
+        id: ref.attachmentId,
+      });
+      const base64 = Buffer.from(data.data, "base64url").toString("base64");
+      if (Buffer.byteLength(base64, "base64") > MAX_ATTACHMENT_BYTES) continue;
+      attachments.push({ filename: ref.filename, mimeType: ref.mimeType, data: base64 });
+    } catch (err) {
+      console.error(`No se pudo descargar el adjunto "${ref.filename}" del correo ${messageId}:`, err.message);
+    }
+  }
+  return attachments;
+}
+
 export async function fetchJudicialEmails({ maxResults = 25 } = {}) {
   const gmail = await client();
   const list = await gmail.users.messages.list({ userId: "me", q: SEARCH_QUERY, maxResults });
@@ -58,6 +100,7 @@ export async function fetchJudicialEmails({ maxResults = 25 } = {}) {
     const { data: msg } = await gmail.users.messages.get({ userId: "me", id, format: "full" });
     const headers = msg.payload?.headers || [];
     const { name: fromName, email: from } = parseFrom(header(headers, "From"));
+    const attachments = await fetchAttachments(gmail, id, msg.payload);
     emails.push({
       id: msg.id,
       subject: header(headers, "Subject"),
@@ -66,6 +109,7 @@ export async function fetchJudicialEmails({ maxResults = 25 } = {}) {
       snippet: msg.snippet || "",
       body: extractPlainText(msg.payload) || msg.snippet || "",
       receivedAt: new Date(Number(msg.internalDate)).toISOString(),
+      attachments,
     });
   }
   return emails;

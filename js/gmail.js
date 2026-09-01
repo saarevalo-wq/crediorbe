@@ -81,13 +81,50 @@ const SEARCH_QUERY =
   'OR subject:tutela OR subject:desacato OR subject:impugnación OR subject:impugnacion ' +
   'OR subject:"derecho de petición" OR subject:peticion OR subject:requerimiento) newer_than:60d';
 
+// Attachment types Claude can read directly (PDF via its document blocks —
+// text-based or scanned, no separate OCR step needed — and common image
+// formats via image blocks, for admisorios sent as a photo/screenshot).
+const READABLE_ATTACHMENT_MIME = new Set(["application/pdf", "image/png", "image/jpeg", "image/webp"]);
+const MAX_ATTACHMENTS_PER_EMAIL = 5;
+const MAX_ATTACHMENT_BYTES = 15 * 1024 * 1024; // Claude's per-document limit is ~32MB; keep well under it.
+
+function collectAttachmentParts(payload, out = []) {
+  if (!payload) return out;
+  if (payload.filename && payload.body?.attachmentId && READABLE_ATTACHMENT_MIME.has(payload.mimeType)) {
+    out.push({ filename: payload.filename, mimeType: payload.mimeType, attachmentId: payload.body.attachmentId });
+  }
+  if (payload.parts) payload.parts.forEach((p) => collectAttachmentParts(p, out));
+  return out;
+}
+
+function base64UrlToBase64(data) {
+  return data.replace(/-/g, "+").replace(/_/g, "/");
+}
+
+async function fetchAttachments(messageId, payload) {
+  const refs = collectAttachmentParts(payload).slice(0, MAX_ATTACHMENTS_PER_EMAIL);
+  const attachments = [];
+  for (const ref of refs) {
+    try {
+      const att = await gmailFetch(`messages/${messageId}/attachments/${ref.attachmentId}`);
+      const base64 = base64UrlToBase64(att.data);
+      if (Math.ceil((base64.length * 3) / 4) > MAX_ATTACHMENT_BYTES) continue;
+      attachments.push({ filename: ref.filename, mimeType: ref.mimeType, data: base64 });
+    } catch (err) {
+      console.error(`No se pudo descargar el adjunto "${ref.filename}":`, err.message);
+    }
+  }
+  return attachments;
+}
+
 export async function fetchJudicialEmails({ maxResults = 25 } = {}) {
   const list = await gmailFetch(`messages?q=${encodeURIComponent(SEARCH_QUERY)}&maxResults=${maxResults}`);
   const ids = (list.messages || []).map((m) => m.id);
   const emails = [];
   for (const id of ids) {
     const msg = await gmailFetch(`messages/${id}?format=full`);
-    emails.push(parseMessage(msg));
+    const attachments = await fetchAttachments(id, msg.payload);
+    emails.push({ ...parseMessage(msg), attachments });
   }
   return emails;
 }
