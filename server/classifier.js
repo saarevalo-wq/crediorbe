@@ -4,6 +4,7 @@
 // Keep both in sync if you tune the classification rules.
 
 import { addBusinessDays } from "./holidays-co.js";
+import { extractAllAttachmentsText } from "./attachment-text.js";
 
 export const ProcessType = {
   DESACATO: "Desacato",
@@ -90,15 +91,56 @@ function extractCaseNumber(text) {
   return m ? m[1] : "—";
 }
 
+// Best-effort, zero-cost extraction of "who filed this against us" and "why"
+// straight from the admisorio's text, using the phrasing Colombian judicial
+// documents tend to use. This is inherently rougher than an AI reading the
+// document with actual comprehension — it's pattern matching, not
+// understanding — so treat its output as a helpful pointer, not a precise
+// summary. It only fills in fields the AI classifier would otherwise handle.
+const COUNTERPARTY_PATTERNS = [
+  /(?:accionante|demandante|peticionario(?:\(a\))?|solicitante|denunciante)\s*:?\s*\n?\s*([A-ZÁÉÍÓÚÑ][A-Za-zÁÉÍÓÚÑáéíóúñ.\s]{4,90}?)(?=[\n,;.]|(?:\s+identificad|\s+quien|\s+en\s+contra))/i,
+];
+function extractCounterparty(text, fallback) {
+  for (const re of COUNTERPARTY_PATTERNS) {
+    const m = text.match(re);
+    if (m) return m[1].replace(/\s+/g, " ").trim();
+  }
+  return fallback;
+}
+
+const MOTIVO_PATTERNS = [
+  // "HECHOS" section headers, common in autos admisorios and tutelas.
+  /\bHECHOS\b\s*:?\s*\n?([\s\S]{40,500}?)(?:\n\s*\n|\bPRETENSION|\bPETICION|\bFUNDAMENTOS DE DERECHO|$)/i,
+  // Direct "se vincula/se admite/en calidad de" phrasing.
+  /((?:por medio del presente|mediante el presente)?[^.\n]{0,40}(?:se\s+(?:le\s+)?(?:vincula|notifica|admite)|se\s+admite\s+la\s+demanda|en\s+calidad\s+de\s+accionad[oa])[^\n]{0,350}\.)/i,
+];
+function extractMotivo(text) {
+  for (const re of MOTIVO_PATTERNS) {
+    const m = text.match(re);
+    if (m) return m[1].replace(/\s+/g, " ").trim().slice(0, 500);
+  }
+  return null;
+}
+
 /**
- * Keyword/regex fallback — used only if the AI classifier is unavailable
- * (no ANTHROPIC_API_KEY configured yet, or the API call failed). It can't
- * read attachments, so it misses the real motivo/contraparte/plazo when
- * those only live in the auto admisorio adjunto — that's the whole reason
- * classifyWithAI (./ai-classifier.js) exists and is tried first.
+ * Free/no-AI classifier: keyword rules for type/urgency/deadline (same as
+ * before) PLUS actual attachment reading — PDFs with a text layer are read
+ * directly (reliable, instant, $0); scanned/photographed documents get a
+ * best-effort local OCR pass (also $0, but slower and less accurate — see
+ * attachment-text.js). Falls back to just the email text if an attachment
+ * can't be read at all.
+ *
+ * This is what runs when no ANTHROPIC_API_KEY is configured — see
+ * classifyWithAI (./ai-classifier.js) for the more accurate but paid path.
  */
 export async function classifyHeuristic(email, priorities) {
-  const text = `${email.subject}\n${email.body || email.snippet}`;
+  const attachmentResults = await extractAllAttachmentsText(email.attachments || []);
+  const attachmentText = attachmentResults.map((a) => a.text).filter(Boolean).join("\n\n");
+  const anyUnreadable = attachmentResults.some((a) => a.ocrFailed);
+
+  const emailText = `${email.subject}\n${email.body || email.snippet}`;
+  const text = attachmentText ? `${emailText}\n\n${attachmentText}` : emailText;
+
   const type = detectType(text);
   if (!type) return null;
 
@@ -110,13 +152,21 @@ export async function classifyHeuristic(email, priorities) {
 
   const receivedAt = new Date(email.receivedAt);
   const deadline = await detectDeadline(text, receivedAt);
-  const summary = (email.snippet || text).replace(/\s+/g, " ").trim().slice(0, 180);
+  const motivoVinculacion = extractMotivo(attachmentText || text);
+  const summary = (motivoVinculacion || email.snippet || text).replace(/\s+/g, " ").trim().slice(0, 180);
+
+  const aiSummaryPoints = [summary];
+  if (anyUnreadable) {
+    aiSummaryPoints.push(
+      "Uno o más adjuntos parecen ser un documento escaneado/foto que no se pudo leer automáticamente — revísalo manualmente."
+    );
+  }
 
   return {
     id: email.id,
     type,
-    counterparty: email.fromName || email.from,
-    motivoVinculacion: null,
+    counterparty: extractCounterparty(text, email.fromName || email.from),
+    motivoVinculacion,
     urgency,
     summary,
     deadline,
@@ -124,9 +174,10 @@ export async function classifyHeuristic(email, priorities) {
     read: false,
     caseNumber: extractCaseNumber(text),
     senderEmail: email.from,
-    aiSummaryPoints: [summary],
+    aiSummaryPoints,
     originalEmailExcerpt: (email.body || email.snippet || "").replace(/\s+/g, " ").trim().slice(0, 500),
     hadAttachments: (email.attachments?.length || 0) > 0,
+    attachmentUnreadable: anyUnreadable,
     classifiedBy: "heuristic",
   };
 }
