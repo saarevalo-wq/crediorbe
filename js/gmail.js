@@ -66,7 +66,16 @@ async function gmailFetch(path) {
     sessionStorage.removeItem(TOKEN_KEY);
     throw new Error("La sesión de Gmail expiró. Conéctate de nuevo en Ajustes.");
   }
-  if (!res.ok) throw new Error(`Gmail API error ${res.status}`);
+  if (!res.ok) {
+    let detail = "";
+    try {
+      const body = await res.json();
+      detail = body?.error?.message || body?.error?.errors?.[0]?.reason || "";
+    } catch {
+      /* body wasn't JSON — ignore, we still have the status code */
+    }
+    throw new Error(`Gmail API error ${res.status}${detail ? `: ${detail}` : ""}`);
+  }
   return res.json();
 }
 
